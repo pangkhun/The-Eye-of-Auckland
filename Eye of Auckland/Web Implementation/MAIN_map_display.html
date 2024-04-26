@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>index</title>
+    <style>
+        *{
+            margin: 0;
+            padding: 0;
+        }
+        html{
+            width: 100%;
+            height:100%;
+            position: relative;
+            overflow: hidden;
+        }
+        .center{
+            width: calc(100% - 40px);
+            height: calc(100vh - 120px);
+            /* position: absolute;
+            top:50%;
+            left:50%;
+            transform: translate(-50%,-50%); */
+            margin: 0 20px;
+            text-align: center;
+        }
+        iframe{
+            width: 100%;
+            height: 100%;
+            border:none;
+        }
+        .logo{
+            height:60px;
+            padding-left: 100px;
+            padding-top: 25px;
+        }
+        .logo img{
+            float: left;
+        }
+        .logo h1{
+            float: left;
+            line-height: 50px;
+        }
+        .right a{
+            float: left;
+            margin-left: 50px;
+            font-weight: 800;
+            font-size: 20px;
+            color:black;
+            text-decoration: none;
+        }
+        .right a:hover {
+            color: #d5d5d5;
+        }
+        .right{
+            float: right;
+            position: absolute;
+            right: 100px;
+            top:25px;
+        }
+        a {
+            text-decoration: none;
+        }
+        .right .active {
+            color: #d5d5d5 !important;
+        }
+
+        #map {
+      height: calc(100% - 80px);
+      width: 100%;
+    }
+
+    /* html,
+    body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    } */
+
+.search-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 0;
+    background: #fff9d1;
+}
+.search-box input[type="text"]{ 
+    border: 1px solid #ffc7c7;
+    border-radius: 5px;
+    padding: 10px 20px;  
+    font-size: 16px;
+    outline: none;  box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1); 
+    width: 300px;
+  }
+.search-box button[type="submit"] 
+{  border: none;  background-color: #6dcd73;  color: #fff;  border-radius: 3px;  padding: 10px 20px;  margin-left: 10px;  font-size: 16px;  cursor: pointer;}.search-box button[type="submit"]:hover {  background-color: #6dd474;}
+.incidentType {
+  display: flex;
+  align-items: center;
+}
+.type-item {
+  padding: 8px 14px;
+  margin: 0 10px;
+  border: 1px solid #ccc;
+  cursor: pointer;
+}
+
+.type-item:hover {
+  border: 1px solid #6dcd73;
+}
+
+.incidentType .active {
+  background-color: #6dcd73;
+}
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="logo"><img src="./img/logo.png"  width="50px" alt=""> <h1>CityEyeAlliance</h1></div>
+         <div class="right">
+            <a href="index.html">Main</a>
+            <a class="active" href="map.html">Maps</a>
+            <a href="about.html">About us</a>
+         </div>
+    </nav>
+    <div class="center">
+        <div class="search-box" id='search'>
+            <input type="text" id="search-input" placeholder="Search for location">
+            <button id="search-btn" type="submit">Search</button>
+            <div class="incidentType" onclick="clickType(event)">
+              <div class="type-item active">Battery</div>
+              <div class="type-item">Burglary</div>
+              <div class="type-item">Fire</div>
+              <div class="type-item">Flooding</div>
+              <div class="type-item">Harassment</div>
+              <div class="type-item">Landslide</div>
+              <div class="type-item">Robbery</div>
+              <div class="type-item">Sexual Assault</div>
+              <div class="type-item">Storm</div>
+              <div class="type-item">Theft</div>
+              <div class="type-item">All</div>
+            </div>
+          </div>
+          <div id="map"></div>
+    </div>
+      <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAzJBRox3qTlUTQienXXDWgUaSs8ot9Bc8&libraries=visualization,geometry,places"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    </div>
+</body>
+</html>
+
+<script>
+    const apiKey = "AIzaSyAzJBRox3qTlUTQienXXDWgUaSs8ot9Bc8";
+
+    const mapOptions = {
+      zoom: 13,
+      center: new google.maps.LatLng(-36.848461, 174.763336),
+      mapTypeId: "roadmap",
+    };
+
+    const map = new google.maps.Map(document.getElementById("map"), mapOptions);
+    const placesService = new google.maps.places.PlacesService(map);
+
+    const searchInput = document.getElementById('search-input');
+    const searchBox = new google.maps.places.SearchBox(searchInput);
+    const autocomplete = new google.maps.places.Autocomplete(searchInput);
+
+    var addressData = {
+      All: {}
+    };
+    var currentInfoWindow = null;
+    var currentMarker = null;
+    var currentType = ''
+    var heatmap = null
+
+    function getRiskLabel(severity) {
+      if (severity < 4) {
+        return "General";
+      } else if (severity >= 4 && severity < 10) {
+        return "Dangerous";
+      } else {
+        return "Especially Dangerous";
+      }
+    }
+
+    fetch("data.csv")
+      .then((response) => response.arrayBuffer())
+      .then((buffer) => {
+        const data = new Uint8Array(buffer);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+        const uniqueIncidentTypes = new Set();
+        let allData = []
+
+        for (let i = 1; i < rows.length; i++) {
+          const [
+            time,
+            week,
+            incidentType,
+            location,
+            date,
+            num,
+            latitude,
+            longitude,
+            severity,
+          ] = rows[i];
+
+          if(!addressData.hasOwnProperty(incidentType)) {
+            addressData[incidentType] = {}
+            addressData[incidentType][location] = {
+              count: 0,
+              severity: 0,
+              latitude,
+              longitude
+            }
+          } else if(addressData.hasOwnProperty(incidentType) && !addressData[incidentType].hasOwnProperty(location)) {
+            addressData[incidentType][location] = {
+              count: 0,
+              severity: 0,
+              latitude,
+              longitude
+            }
+          }
+          if(!addressData.All.hasOwnProperty(location)) {
+            addressData.All[location] = {
+              count: 0,
+              severity: 0,
+              latitude,
+              longitude
+            }
+          }
+          addressData[incidentType][location].count += num
+          addressData[incidentType][location].severity += severity
+          addressData.All[location].count += num
+          addressData.All[location].severity += severity
+        }
+        console.log(Object.keys(addressData.All))
+        console.log(Object.keys(addressData.Battery))
+        currentType = Object.keys(addressData).shift()
+        
+        initHeatMap()
+        map.addListener("click", function (event) {
+          showInfoWindow(event.latLng);
+        });
+      })
+      .catch((error) => {
+        console.error("Error fetching 1.csv:", error);
+      });
+
+    function initHeatMap() {
+          const heatmapData = Object.values(addressData[currentType]).map((data) => (
+          {
+          location: new google.maps.LatLng(data.latitude, data.longitude),
+          weight: data.severity/data.count,
+        }));
+        if(heatmap) {
+          heatmap.setMap(null);
+          heatmap.setData([]);
+        }
+        heatmap = new google.maps.visualization.HeatmapLayer({
+          data: heatmapData,
+          map: map,
+        })
+    }
+
+    function showInfoWindow(latLng, placeName) {
+      const nearestData = Object.entries(addressData[currentType]).reduce(
+        (nearest, [location, data]) => {
+          const distance = google.maps.geometry.spherical.computeDistanceBetween(
+            latLng,
+            new google.maps.LatLng(data.latitude, data.longitude)
+          );
+
+          if (nearest.distance === null || distance < nearest.distance) {
+            return { location, data, distance };
+          } else {
+            return nearest;
+          }
+        },
+        { location: null, data: null, distance: null }
+      );
+
+      const severity = (nearestData.data.severity / nearestData.data.count).toFixed(1);
+
+      const riskLabel = getRiskLabel(severity);
+
+      const contentString =
+        '<div style="color: #2196f3;">' +
+        "<h3>" +
+        nearestData.location +
+        "</h3>" +
+        "<p>" +
+          '<span style="font-weight: bold;">CrimeType: </span>' +
+          currentType +
+        "</p>" +
+        "<p>" +
+          '<span style="font-weight: bold;">Incidents: </span>' +
+        nearestData.data.count +
+        "</p>" +
+        "<p>" +
+          '<span style="font-weight: bold;">Severity: </span>' +
+        severity +
+        "</p>" +
+        "<p>" +
+          '<span style="font-weight: bold;">Risk: </span>' +
+        riskLabel +
+        "</p>" +
+        "</div>";
+
+      const infowindow = new google.maps.InfoWindow({
+        content: contentString,
+      });
+
+      if (currentInfoWindow) {
+        currentInfoWindow.close();
+      }
+
+      if (currentMarker) {
+        currentMarker.setMap(null);
+      }
+
+      const marker = new google.maps.Marker({
+        position: latLng,
+        map: map,
+      });
+
+      infowindow.open(map, marker);
+
+      currentInfoWindow = infowindow;
+      currentMarker = marker;
+    }
+
+    document.getElementById('search-btn').addEventListener('click', function() {
+      const searchText = document.getElementById('search-input').value;
+      placesService.findPlaceFromQuery({
+        query: searchText,
+        fields: ['geometry', 'name']
+      }, function(results, status) {
+        if (status === google.maps.places.PlacesServiceStatus.OK && results.length > 0) {
+          const place = results[0];
+          map.setCenter(place.geometry.location);
+          map.setZoom(15);
+          showInfoWindow(place.geometry.location, place.name);
+        }
+      });
+    });
+
+    function clickType(event) {
+      [...document.getElementsByClassName('type-item')].forEach(item => {
+        item.className = 'type-item'
+      })
+      if(event.target.className.indexOf('type-item') > -1) {
+        event.target.classList.toggle('active')
+        currentType = event.target.innerText
+        initHeatMap()
+      }
+    }
+  </script>
